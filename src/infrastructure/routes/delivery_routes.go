@@ -1,10 +1,11 @@
 package routes
 
 import (
-	controller "delivery-service/src/infrastructure/controller"
-	"github.com/gin-gonic/gin"
+    "delivery-service/src/infrastructure/controller"
+    "github.com/gin-gonic/gin"
 )
 
-func DeliveryRoutes(router *gin.Engine, controller *controller.DeliveryAlertController) {
-	router.GET("/api/delivery", controller.ProcessDeliveryAlerts)
+func DeliveryRoutes(router *gin.Engine, deliveryAlertController *controllers.DeliveryAlertController) {
+    router.POST("/api/delivery", deliveryAlertController.PublishDeliveryAlert)
+    router.GET("/api/delivery", deliveryAlertController.GetDeliveryAlerts)
 }

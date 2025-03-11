@@ -48,12 +48,42 @@ func (r *RabbitMQ) Publish(message string) error {
         false,
         false,
         amqp.Publishing{
-            ContentType: "text/plain",
+            ContentType: "application/json",
             Body:        []byte(message),
         },
     )
     if err != nil {
         log.Printf("Failed to publish message: %v", err)
+        return err
+    }
+    return nil
+}
+
+func (r *RabbitMQ) PublishToQueue(queueName, message string) error {
+    _, err := r.channel.QueueDeclare(
+        queueName,
+        true,
+        false,
+        false,
+        false,
+        nil,
+    )
+    if err != nil {
+        return err
+    }
+
+    err = r.channel.Publish(
+        "",
+        queueName,
+        false,
+        false,
+        amqp.Publishing{
+            ContentType: "application/json",
+            Body:        []byte(message),
+        },
+    )
+    if err != nil {
+        log.Printf("Failed to publish message to queue %s: %v", queueName, err)
         return err
     }
     return nil

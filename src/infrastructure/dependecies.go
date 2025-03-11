@@ -1,14 +1,14 @@
 package infrastructure
 
 import (
-    "log"
-    "delivery-service/src/application/services"
-    "delivery-service/src/application/repositorys"
-    "delivery-service/src/infrastructure/adapters"
-    "delivery-service/src/infrastructure/controller"
+	"delivery-service/src/application"
+	"delivery-service/src/application/repositorys"
+	"delivery-service/src/application/services"
+	"delivery-service/src/infrastructure/adapters"
+	"log"
 )
 
-func Init() *controllers.DeliveryAlertController {
+func Init() (*services.DeliveryAlertService, *adapters.RabbitMQ) {
     rabbitMQ, err := adapters.NewRabbitMQ("amqp://max:123@44.213.165.25:5672/", "Pizzas")
     if err != nil {
         log.Fatalf("Failed to initialize RabbitMQ: %v", err)
@@ -17,11 +17,10 @@ func Init() *controllers.DeliveryAlertController {
     rabbitRepo := repositorys.NewRabbitRepository(rabbitMQ)
     repo := NewMySQL()
 
-    deliveryAlertUseCase := services.NewDeliveryAlertUseCase(repo, rabbitRepo)
+    deliveryAlertUseCase := application.NewDeliveryAlertUseCase(repo, rabbitRepo)
     deliveryAlertService := services.NewDeliveryAlertService(rabbitMQ, deliveryAlertUseCase)
-    deliveryAlertController := controllers.NewDeliveryAlertController(deliveryAlertService)
 
     go deliveryAlertService.ProcessDeliveryAlerts()
 
-    return deliveryAlertController
+    return deliveryAlertService, rabbitMQ
 }

@@ -1,20 +1,26 @@
 package services
 
 import (
+    "encoding/json"
     "log"
     "fmt"
     "time"
     "delivery-service/src/infrastructure/adapters"
     "delivery-service/src/domain/entities"
-    "delivery-service/src/domain"
 )
 
-type DeliveryAlertService struct {
-    rabbitMQ *adapters.RabbitMQ
-    useCase  *DeliveryAlertUseCase
+type DeliveryAlertUseCase interface {
+    CreateDeliveryAlert(alert entities.DeliveryAlert) error
+    GetAllDeliveryAlerts() ([]entities.DeliveryAlert, error)
 }
 
-func NewDeliveryAlertService(rabbitMQ *adapters.RabbitMQ, useCase *DeliveryAlertUseCase) *DeliveryAlertService {
+type DeliveryAlertService struct {
+    rabbitMQ    *adapters.RabbitMQ
+    useCase     DeliveryAlertUseCase
+    latestAlert *entities.DeliveryAlert
+}
+
+func NewDeliveryAlertService(rabbitMQ *adapters.RabbitMQ, useCase DeliveryAlertUseCase) *DeliveryAlertService {
     return &DeliveryAlertService{
         rabbitMQ: rabbitMQ,
         useCase:  useCase,
@@ -25,44 +31,50 @@ func (s *DeliveryAlertService) ProcessDeliveryAlerts() {
     consumerTag := fmt.Sprintf("consumer-%d", time.Now().UnixNano())
     msgs, err := s.rabbitMQ.Consume(consumerTag)
     if err != nil {
-        log.Fatalf("Failed to consume messages: %v", err)
+        log.Fatalf("Error al consumir mensajes: %v", err)
     }
 
     for msg := range msgs {
         log.Printf("Orden Entregada: %s", msg.Body)
-        alert := entities.DeliveryAlert{
-            Alert: string(msg.Body),
+        
+        var alert entities.DeliveryAlert
+        if err := json.Unmarshal(msg.Body, &alert); err != nil {
+            log.Printf("Error al deserializar mensaje: %v", err)
+            continue
         }
+
         if err := s.useCase.CreateDeliveryAlert(alert); err != nil {
             log.Printf("No se pudo entregar la Orden: %v", err)
+        } else {
+            s.latestAlert = &alert
+            log.Printf("Última alerta actualizada: %+v", s.latestAlert)
+
+            message, err := json.Marshal(alert)
+            if err != nil {
+                log.Printf("Error al serializar alerta: %v", err)
+                continue
+            }
+
+            err = s.rabbitMQ.PublishToQueue("Alert", string(message))
+            if err != nil {
+                log.Printf("Error al publicar alerta en la cola 'Alert': %v", err)
+            }
         }
     }
+}
+
+func (s *DeliveryAlertService) GetLatestDeliveryAlert() (*entities.DeliveryAlert, error) {
+    if s.latestAlert == nil {
+        return nil, fmt.Errorf("No hay alertas recientes")
+    }
+    return s.latestAlert, nil
 }
 
 func (s *DeliveryAlertService) GetAllDeliveryAlerts() ([]entities.DeliveryAlert, error) {
-    return s.useCase.GetAllDeliveryAlerts()
-}
-
-type DeliveryAlertUseCase struct {
-    repo       domain.DeliveryAlertRepository
-    rabbitRepo domain.RabbitRepository
-}
-
-func NewDeliveryAlertUseCase(repo domain.DeliveryAlertRepository, rabbitRepo domain.RabbitRepository) *DeliveryAlertUseCase {
-    return &DeliveryAlertUseCase{
-        repo:       repo,
-        rabbitRepo: rabbitRepo,
-    }
-}
-
-func (uc *DeliveryAlertUseCase) CreateDeliveryAlert(alert entities.DeliveryAlert) error {
-    err := uc.repo.Create(&alert)
+    alerts, err := s.useCase.GetAllDeliveryAlerts()
     if err != nil {
-        return err
+        log.Printf("Error al obtener todas las alertas: %v", err)
+        return nil, err
     }
-    return uc.rabbitRepo.PublishDeliveryAlert(alert.Alert)
-}
-
-func (uc *DeliveryAlertUseCase) GetAllDeliveryAlerts() ([]entities.DeliveryAlert, error) {
-    return uc.repo.GetAll()
+    return alerts, nil
 }
