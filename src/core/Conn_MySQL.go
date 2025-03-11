@@ -23,7 +23,7 @@ var (
 
 func GetDBPool() *Conn_MySQL {
 	once.Do(func() {
-		dsn := "root:nocbro123@tcp(localhost:3306)/pizza"
+		dsn := "root:nocbro123@tcp(54.87.5.19:3306)/pizza"
 		db, err := sql.Open("mysql", dsn)
 		if err != nil {
 			log.Fatalf("Error al conectar con MySQL: %v", err)
